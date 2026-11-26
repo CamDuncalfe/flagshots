@@ -183,6 +183,78 @@ function cropAround(box, pageWidth, pageHeight) {
   return { x: Math.round(left), y: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) };
 }
 
+// How far an edge of the crop may move to find a blank line, and the room left around the content.
+const SNAP_LIMIT = 240;
+const MARGIN = 24;
+// A blank line allows far less colour difference than THRESHOLD: a card's 1 px border, smeared
+// over two pixel columns by anti-aliasing, has to count as content.
+const BLANK_THRESHOLD = 4;
+
+// Whether a line of pixels is one flat colour in every shot of the row, like the gap between two
+// cards. A crop edge on a line like that cuts nothing in half. Past the edge of a page counts as blank.
+function blankLine(shots, vertical, at, from, to) {
+  const first = shots[0];
+  if (vertical ? at <= 0 || at >= first.width : at <= 0 || at >= first.height) return true;
+  const base = (vertical ? from * first.width + at : at * first.width + from) * 4;
+  for (const shot of shots) {
+    for (let k = from; k < to; k++) {
+      const x = vertical ? at : k;
+      const y = vertical ? k : at;
+      if (x >= shot.width || y >= shot.height) return false;
+      const i = (y * shot.width + x) * 4;
+      if (
+        Math.abs(shot.data[i] - first.data[base]) > BLANK_THRESHOLD ||
+        Math.abs(shot.data[i + 1] - first.data[base + 1]) > BLANK_THRESHOLD ||
+        Math.abs(shot.data[i + 2] - first.data[base + 2]) > BLANK_THRESHOLD
+      ) return false;
+    }
+  }
+  return true;
+}
+
+// Fits the crop to whole things on the page. Each edge first moves to the nearest blank line,
+// outwards or inwards, so the crop holds whole cards and buttons instead of slicing through one.
+// Then each edge moves in past any empty page to the first content, and back out by MARGIN
+// where the page is blank there.
+// An edge never moves inside the area that changed, and with no blank line within SNAP_LIMIT
+// it stays where it was.
+function fitToContent(crop, box, shots) {
+  const width = shots[0].width;
+  const height = shots[0].height;
+  const e = { left: crop.x, top: crop.y, right: crop.x + crop.width, bottom: crop.y + crop.height };
+  // For each edge: which way is out, how far in it may go, and whether its line runs up and down.
+  const sides = {
+    left: { out: -1, limit: box.left, vertical: true },
+    right: { out: 1, limit: box.right, vertical: true },
+    top: { out: -1, limit: box.top, vertical: false },
+    bottom: { out: 1, limit: box.bottom, vertical: false },
+  };
+  const blank = (side, at) => {
+    const { vertical } = sides[side];
+    return blankLine(shots, vertical, at, vertical ? e.top : e.left, vertical ? e.bottom : e.right);
+  };
+  // Whether a line sits outside the changed area, so the edge may stop there.
+  const outside = (side, at) => sides[side].out * (at - sides[side].limit) >= 0;
+
+  for (const side of ['left', 'right', 'top', 'bottom']) {
+    const { out } = sides[side];
+    for (let d = 0; d <= SNAP_LIMIT; d++) {
+      if (blank(side, e[side] + out * d)) { e[side] += out * d; break; }
+      const inner = e[side] - out * d;
+      if (outside(side, inner) && blank(side, inner)) { e[side] = inner; break; }
+    }
+  }
+  for (const side of ['top', 'bottom', 'left', 'right']) {
+    const { out } = sides[side];
+    while (outside(side, e[side] - out) && blank(side, e[side] - out)) e[side] -= out;
+    for (let k = 0; k < MARGIN && blank(side, e[side] + out); k++) e[side] += out;
+  }
+
+  const left = Math.max(0, e.left), top = Math.max(0, e.top);
+  const right = Math.min(width, e.right), bottom = Math.min(height, e.bottom);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -223,7 +295,8 @@ async function build() {
     // When the change covers most of the page (a colour scheme, a new layout), the row shows
     // whole pages: a crop that large only cuts off the edges.
     const whole = { x: 0, y: 0, width: pageWidth, height: pageHeight };
-    let crop = union ? cropAround(union, pageWidth, pageHeight) : whole;
+    const shots = row.cells.map((c) => px[c.image]);
+    let crop = union ? fitToContent(cropAround(union, pageWidth, pageHeight), union, shots) : whole;
     if (crop.width * crop.height > 0.55 * pageWidth * pageHeight) crop = whole;
     measured.push({ flag: row.flag, changed: Boolean(union), crop });
 
