@@ -1,0 +1,15 @@
+{
+  "name": "flagshots",
+  "version": "0.1.0",
+  "description": "Screenshots your app in each Flagsmith flag variant and posts them side by side on the pull request",
+  "license": "MIT",
+  "author": "Cam Duncalfe",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "flagsmith:up": "docker compose up -d",
+    "flagsmith:down": "docker compose down",
+    "seed": "node scripts/seed.js",
+    "demo": "npm --prefix demo run dev"
+  }
+}
