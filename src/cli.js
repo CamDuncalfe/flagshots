@@ -15,7 +15,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
 import { FlagsmithAdmin } from './flagsmith-admin.js';
-import { planShots, slug } from './plan.js';
+import { planShots, attachExperiments, slug } from './plan.js';
 import { applyOverrides, checkOverrides } from './overrides.js';
 import { renderPages } from './render.js';
 import { buildGrid } from './grid.js';
@@ -93,6 +93,12 @@ async function main() {
   const only = args.flags ? args.flags.split(',').map((f) => f.trim()) : config.flags;
   const rows = planShots(features, states, { only });
   if (!rows.length) throw new Error('Flagsmith returned no flags to screenshot for this environment.');
+  // A flag in a Flagsmith experiment gets the experiment's name and hypothesis on its row,
+  // and its control and treatment shots are labelled.
+  attachExperiments(rows, await admin.experiments(environmentKey));
+  for (const row of rows.filter((r) => r.experiment)) {
+    console.log(`${row.flag} is in the experiment "${row.experiment.name}" (${row.experiment.status})`);
+  }
 
   const shots = rows.reduce((n, r) => n + r.cells.length - 1, 1);
   console.log(`${rows.length} flags in ${environment.name}, ${shots} shots per page`);
@@ -120,7 +126,8 @@ async function main() {
     flags: rows.map((r) => ({
       flag: r.flag,
       description: r.description,
-      states: r.cells.map((c) => ({ label: c.label, default: c.isDefault, identity: c.identity })),
+      experiment: r.experiment ?? null,
+      states: r.cells.map((c) => ({ label: c.label, default: c.isDefault, identity: c.identity, arm: c.arm ?? null })),
     })),
     pages,
   };

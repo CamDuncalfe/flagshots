@@ -44,12 +44,21 @@ export function commentBody(summary, { images = new Map(), commit, runUrl } = {}
     }
   }
 
+  // Flags in a Flagsmith experiment: the reviewer sees each arm before real visitors do.
+  for (const flag of summary.flags.filter((f) => f.experiment)) {
+    const { name, status, hypothesis } = flag.experiment;
+    const arms = flag.states.some((s) => s.arm) ? ' Its row labels the control and treatment shots.' : '';
+    lines.push(`\`${flag.flag}\` is in the Flagsmith experiment \u201c${cell(name)}\u201d (${status}).${arms}`, '');
+    if (hypothesis) lines.push(`> ${cell(hypothesis)}`, '');
+  }
+
   lines.push('<details><summary>Flags and states</summary>', '');
   lines.push('| Flag | Visitors get | Also rendered |', '| --- | --- | --- |');
   for (const flag of summary.flags) {
+    const label = (s) => cell(s.arm ? `${s.label} (${s.arm})` : s.label);
     const now = flag.states.find((s) => s.default);
-    const others = flag.states.filter((s) => !s.default).map((s) => cell(s.label));
-    lines.push(`| \`${flag.flag}\` | ${cell(now?.label ?? '')} | ${others.join(', ')} |`);
+    const others = flag.states.filter((s) => !s.default).map(label);
+    lines.push(`| \`${flag.flag}\` | ${now ? label(now) : ''} | ${others.join(', ')} |`);
   }
   const example = summary.flags.flatMap((f) => f.states).find((s) => s.identity)?.identity;
   lines.push('');

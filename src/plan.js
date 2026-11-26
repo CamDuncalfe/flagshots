@@ -55,16 +55,21 @@ export function planShots(features, states, { only } = {}) {
     if (feature.type === 'MULTIVARIATE') {
       // The control value plus each option. If the flag is switched off in the environment,
       // the default cell shows it off and every value, the control value included, gets a shot.
-      const values = [current.feature_state_value, ...feature.multivariate_options.map(optionValue)];
+      // optionId says which multivariate option a value came from (null for the control value),
+      // so an experiment's split can be matched to the right cells.
+      const values = [
+        { value: current.feature_state_value, optionId: null },
+        ...feature.multivariate_options.map((o) => ({ value: optionValue(o), optionId: o.id })),
+      ];
       if (current.enabled) {
-        cells.push({ label: String(values[0]), enabled: true, value: values[0], isDefault: true, identity: null });
-        values.shift();
+        const { value, optionId } = values.shift();
+        cells.push({ label: String(value), enabled: true, value, optionId, isDefault: true, identity: null });
       } else {
         cells.push({ label: 'Off', enabled: false, value: current.feature_state_value, isDefault: true, identity: null });
       }
-      for (const value of values) {
+      for (const { value, optionId } of values) {
         const label = String(value);
-        cells.push({ label, enabled: true, value, isDefault: false, identity: identityFor(feature.name, label) });
+        cells.push({ label, enabled: true, value, optionId, isDefault: false, identity: identityFor(feature.name, label) });
       }
     } else {
       // An on/off flag: the state it's in now, then the opposite.
@@ -76,6 +81,50 @@ export function planShots(features, states, { only } = {}) {
     }
 
     rows.push({ flag: feature.name, featureId: feature.id, description: feature.description ?? '', cells });
+  }
+  return rows;
+}
+
+const STATUS = { created: 'not started', running: 'running', paused: 'paused' };
+
+// A share of visitors as a label: 50 -> "50%", 33.333 -> "33.3%".
+function percent(n) {
+  return `${Number(n.toFixed(1))}%`;
+}
+
+// experiments: from FlagsmithAdmin.experiments, each with its experiment_rollout.
+// Marks each row whose flag is in an experiment with the experiment's name, hypothesis and
+// status, and marks the cells that are arms of it: "Control, 50%", "Treatment, 50%".
+// A value the experiment gives 0% stays unmarked. If the split doesn't match the row's cells
+// (a value removed since the experiment was set up, say), no cell is marked rather than a wrong one.
+export function attachExperiments(rows, experiments) {
+  for (const experiment of experiments) {
+    const featureId = experiment.feature?.id ?? experiment.feature;
+    const row = rows.find((r) => r.featureId === featureId);
+    if (!row || experiment.status === 'completed') continue;
+    row.experiment = {
+      name: experiment.name,
+      hypothesis: experiment.hypothesis ?? '',
+      status: STATUS[experiment.status] ?? experiment.status,
+    };
+
+    const rollout = experiment.experiment_rollout;
+    const split = (rollout?.multivariate_feature_state_values ?? []).filter((v) => v.percentage_allocation > 0);
+    if (!split.length) continue;
+
+    // Control gets whatever share the other values leave.
+    const controlShare = 100 - split.reduce((sum, v) => sum + v.percentage_allocation, 0);
+    const control = row.cells.find(
+      (c) => c.enabled && c.optionId === null && String(c.value) === String(rollout.feature_state_value?.value),
+    );
+    const treatments = split.map((v) => row.cells.find((c) => c.optionId === v.multivariate_feature_option));
+    if (!control || treatments.includes(undefined)) continue;
+
+    control.arm = `Control, ${percent(controlShare)}`;
+    treatments.forEach((cell, i) => {
+      const name = treatments.length === 1 ? 'Treatment' : `Treatment ${String.fromCharCode(65 + i)}`;
+      cell.arm = `${name}, ${percent(split[i].percentage_allocation)}`;
+    });
   }
   return rows;
 }

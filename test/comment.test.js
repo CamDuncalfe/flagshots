@@ -42,3 +42,24 @@ test('names flags that look the same in every state on a page', () => {
 test('escapes pipes in table cells', () => {
   assert.match(commentBody(summary), /\| `checkout_button_copy` \| Start free trial \| Get \\\| started \|/);
 });
+
+test('names the experiment a flag is in, quotes its hypothesis and labels the arms in the table', () => {
+  const withExperiment = {
+    ...summary,
+    flags: [
+      {
+        flag: 'checkout_button_copy',
+        experiment: { name: 'Sign-up button copy', status: 'not started', hypothesis: 'Shorter wins.' },
+        states: [
+          { label: 'Start free trial', default: true, identity: null, arm: 'Control, 50%' },
+          { label: 'Get started', default: false, identity: 'flagshots-checkout_button_copy-get-started', arm: 'Treatment, 50%' },
+        ],
+      },
+    ],
+  };
+  const body = commentBody(withExperiment);
+  assert.match(body, /`checkout_button_copy` is in the Flagsmith experiment \u201cSign-up button copy\u201d \(not started\)\. Its row labels the control and treatment shots\./);
+  assert.match(body, /> Shorter wins\./);
+  assert.match(body, /\| Start free trial \(Control, 50%\) \| Get started \(Treatment, 50%\) \|/);
+});
+

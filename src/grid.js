@@ -39,8 +39,10 @@ export async function buildGrid(browser, rows, rendered, outFile) {
     rows: rows.map((row) => ({
       flag: row.flag,
       description: row.description,
+      experiment: row.experiment ?? null,
       cells: row.cells.map((cell) => ({
         label: cell.label,
+        arm: cell.arm ?? null,
         quoted: typeof cell.value === 'string' && cell.enabled && cell.label === cell.value,
         isDefault: cell.isDefault,
         image: cell.identity ?? 'default',
@@ -101,6 +103,10 @@ const GRID_HTML = /* html */ `<!doctype html>
   canvas { display: block; width: 100%; height: auto; }
   figcaption { margin-top: 8px; font-size: 13px; line-height: 1.4; text-wrap: balance; overflow-wrap: anywhere; }
   .tag { color: var(--muted); }
+  .arm { display: block; color: var(--muted); }
+  .experiment { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+  .experiment p { margin: 0; font-size: 13px; line-height: 1.4; text-wrap: pretty; }
+  .experiment .hypothesis { margin-top: 2px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -225,6 +231,14 @@ async function build() {
     section.append(el('p', 'flag', row.flag));
     const note = [row.description, union ? '' : 'No visible change on this page.'].filter(Boolean).join(' ');
     if (note) section.append(el('p', 'note', note));
+    if (row.experiment) {
+      // The experiment this flag is in, read from Flagsmith: its name, whether it has started,
+      // and the hypothesis the team wrote for it.
+      const box = el('div', 'experiment');
+      box.append(el('p', null, 'Experiment \u201c' + row.experiment.name + '\u201d, ' + row.experiment.status));
+      if (row.experiment.hypothesis) box.append(el('p', 'hypothesis', row.experiment.hypothesis));
+      section.append(box);
+    }
 
     const cells = el('div', 'cells');
     cells.style.setProperty('--columns', columns);
@@ -248,6 +262,7 @@ async function build() {
         caption.append(' ');
         caption.append(el('span', 'tag', '(default)'));
       }
+      if (cell.arm) caption.append(el('span', 'arm', cell.arm));
       figure.append(caption);
       cells.append(figure);
     }

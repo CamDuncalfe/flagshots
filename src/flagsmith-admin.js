@@ -137,13 +137,41 @@ export class FlagsmithAdmin {
   // Asks Flagsmith for an identity's flags the way an app's SDK does, with the client-side
   // environment key and no admin token. Flagshots uses it to check each override took effect.
   async flagsForIdentity(environmentKey, identifier) {
-    const res = await fetch(
-      `${this.apiUrl}/identities/?identifier=${encodeURIComponent(identifier)}`,
-      { headers: { 'X-Environment-Key': environmentKey } },
+    const data = await this.clientRequest(
+      environmentKey,
+      `/identities/?identifier=${encodeURIComponent(identifier)}`,
     );
-    if (!res.ok) throw new Error(`Flagsmith answered ${res.status} for identity ${identifier}`);
-    const data = await res.json();
-    return new Map(data.flags.map((f) => [f.feature.name, { enabled: f.enabled, value: f.feature_state_value }]));
+    return flagMap(data.flags);
+  }
+
+  // The flags an anonymous visitor gets, which is what the default shot shows.
+  async flagsForVisitor(environmentKey) {
+    return flagMap(await this.clientRequest(environmentKey, '/flags/'));
+  }
+
+  async clientRequest(environmentKey, path) {
+    const res = await fetch(`${this.apiUrl}${path}`, { headers: { 'X-Environment-Key': environmentKey } });
+    if (!res.ok) throw new Error(`Flagsmith answered ${res.status} for ${path}`);
+    return res.json();
+  }
+
+  // The environment's experiments that haven't finished, each with its split between control
+  // and the other values. The list route leaves the split out, so each one is fetched on its own.
+  // An instance without experiments (an older Flagsmith, or experimentation switched off)
+  // answers with an error here, and Flagshots carries on without them.
+  async experiments(environmentKey) {
+    let list;
+    try {
+      list = await this.list(`/environments/${environmentKey}/experiments/`);
+    } catch {
+      return [];
+    }
+    const open = list.filter((e) => e.status !== 'completed');
+    return Promise.all(open.map((e) => this.request('GET', `/environments/${environmentKey}/experiments/${e.id}/`)));
+  }
+
+  createExperiment(environmentKey, experiment) {
+    return this.request('POST', `/environments/${environmentKey}/experiments/`, experiment);
   }
 
   updateFeatureState(environmentKey, featureStateId, changes) {
@@ -153,4 +181,11 @@ export class FlagsmithAdmin {
       changes,
     );
   }
+}
+
+// Flag name -> { id, enabled, value }, from the flags list the client-side API returns.
+function flagMap(flags) {
+  return new Map(
+    flags.map((f) => [f.feature.name, { id: f.feature.id, enabled: f.enabled, value: f.feature_state_value }]),
+  );
 }

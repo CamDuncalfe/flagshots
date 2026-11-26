@@ -9,7 +9,10 @@
       "type": "MULTIVARIATE",
       "enabled": true,
       "value": "classic",
-      "variants": ["split", "banner"]
+      "variants": [
+        "split",
+        "banner"
+      ]
     },
     {
       "name": "pricing_badge",
@@ -23,13 +26,26 @@
       "type": "MULTIVARIATE",
       "enabled": true,
       "value": "Start free trial",
-      "variants": ["Get started", "Try it free for 14 days"]
+      "variants": [
+        "Get started",
+        "Try it free for 14 days"
+      ]
     },
     {
       "name": "dark_mode",
       "description": "Dark colour scheme",
       "type": "STANDARD",
       "enabled": false
+    }
+  ],
+  "experiments": [
+    {
+      "name": "Sign-up button copy",
+      "flag": "checkout_button_copy",
+      "hypothesis": "More visitors start a trial when the button says Get started.",
+      "split": {
+        "Get started": 50
+      }
     }
   ]
 }

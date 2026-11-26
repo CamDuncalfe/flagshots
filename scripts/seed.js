@@ -2,8 +2,8 @@
 //
 //   node scripts/seed.js
 //
-// It signs up a local admin user, creates the organisation, project, environment and features,
-// then writes the environment key to demo/.env.local so the demo app can read its flags,
+// It signs up a local admin user, creates the organisation, project, environment, features and
+// experiments, then writes the environment key to demo/.env.local so the demo app can read its flags,
 // and the settings npm run shots needs to .env.local.
 // Running it twice is safe: anything that already exists is reused.
 //
@@ -62,6 +62,35 @@ for (const state of await admin.environmentFeatureStates(environment.api_key)) {
     await admin.updateFeatureState(environment.api_key, state.id, { enabled: wanted.get(name) });
     console.log(`Turned ${name} ${wanted.get(name) ? 'on' : 'off'}`);
   }
+}
+
+// Experiments are created but not started, so the pull request shows both arms before any
+// visitor is put in one. The seed gives each value it doesn't name a 0% share, because
+// Flagsmith wants every value of the flag listed.
+const valueType = (v) => (typeof v === 'number' ? 'integer' : typeof v === 'boolean' ? 'boolean' : 'string');
+const features = await admin.features(project.id);
+const experimentNames = new Set((await admin.experiments(environment.api_key)).map((e) => e.name));
+for (const experiment of seed.experiments ?? []) {
+  if (experimentNames.has(experiment.name)) continue;
+  const feature = features.find((f) => f.name === experiment.flag);
+  if (!feature) throw new Error(`The seed's experiment "${experiment.name}" names a flag that doesn't exist: ${experiment.flag}`);
+  const split = experiment.split ?? {};
+  const control = feature.initial_value;
+  await admin.createExperiment(environment.api_key, {
+    feature: feature.id,
+    name: experiment.name,
+    hypothesis: experiment.hypothesis,
+    experiment_rollout: {
+      enabled: true,
+      rollout_percentage: 100,
+      feature_state_value: { type: valueType(control), value: String(control) },
+      multivariate_feature_state_values: feature.multivariate_options.map((o) => ({
+        multivariate_feature_option: o.id,
+        percentage_allocation: split[o.string_value ?? o.integer_value ?? o.boolean_value] ?? 0,
+      })),
+    },
+  });
+  console.log(`Created the experiment ${experiment.name}`);
 }
 
 if (process.env.GITHUB_ENV) {
