@@ -47,7 +47,10 @@ async function main() {
       path: `${folder}/${p.slug}.png`,
       file: path.resolve(summaryDir, path.basename(p.grid)),
     }));
-    const sha = await github.commitImages(IMAGE_BRANCH, files, `Flagshots grids for ${pr ? `#${pr.number} at ` : ''}${commit.slice(0, 7)}`);
+    // The message says "pull request 12", not "#12": GitHub links a "#12" commit message into the
+    // pull request's timeline, which would add a line there on every push.
+    const message = `Flagshots grids for ${pr ? `pull request ${pr.number} at ` : ''}${commit.slice(0, 7)}`;
+    const sha = await github.commitImages(IMAGE_BRANCH, files, message);
     // The links name the commit, not the branch, so an edited comment always shows the new
     // images and never a cached copy of the old ones.
     for (const f of files) images.set(f.slug, `${server}/${repo}/raw/${sha}/${f.path}`);
