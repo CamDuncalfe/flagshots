@@ -118,6 +118,12 @@ const data = __DATA__;
 // It absorbs tiny anti-aliasing differences without hiding a real change.
 const THRESHOLD = 24;
 const PADDING = 32;
+// A cropped shot is drawn at half its size or more, so a button label stays readable. A row with
+// more shots than fit at that size wraps onto a second line.
+const MIN_SCALE = 0.5;
+const MAX_PER_LINE = 3;
+const CONTENT_WIDTH = ${GRID_WIDTH} - 2 * 24;
+const GAP = 16; // the gap between shots in .cells above
 const MIN_WIDTH = 560;
 const MIN_HEIGHT = 400;
 
@@ -314,7 +320,14 @@ async function build() {
     }
 
     const cells = el('div', 'cells');
-    cells.style.setProperty('--columns', columns);
+    // Three shots a line at most, the same width in every row, so whole pages stay big enough to
+    // compare. A cropped row takes fewer a line when it needs them bigger to stay at MIN_SCALE.
+    let perLine = Math.min(columns, MAX_PER_LINE);
+    if (crop !== whole) {
+      const scale = (n) => (CONTENT_WIDTH - GAP * (n - 1)) / n / crop.width;
+      while (perLine > 1 && scale(perLine) < MIN_SCALE) perLine--;
+    }
+    cells.style.setProperty('--columns', perLine);
     for (const cell of row.cells) {
       const figure = el('figure');
       const frame = el('div', 'frame');
