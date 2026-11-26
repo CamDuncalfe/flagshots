@@ -20,19 +20,20 @@ function cell(text) {
 export function commentBody(summary, { images = new Map(), commit, runUrl } = {}) {
   const lines = [MARKER, '### Flagshots', ''];
 
-  const from = commit ? ` Screenshots from ${commit.slice(0, 7)}.` : '';
+  const from = commit ? ` Taken at ${commit.slice(0, 7)}.` : '';
   lines.push(
-    `Every state of each flag in Flagsmith (${summary.environment}), a row per flag. ` +
-      `The first column is what visitors get today.${from}`,
+    `Flagshots opened the app once for each state of each flag in Flagsmith (${summary.environment}). ` +
+      `Each flag has a row, and the first picture in it is what visitors see today.${from}`,
     '',
   );
 
   for (const page of summary.pages) {
-    lines.push(`#### ${page.name} \`${page.path}\``, '');
     const url = images.get(page.slug);
     if (url) {
+      // The grid image has the page's name and path at the top, so it needs no heading here.
       lines.push(`![${page.name} in each flag state](${url})`, '');
     } else {
+      lines.push(`#### ${page.name} \`${page.path}\``, '');
       lines.push(`The grid for ${page.name} is in the \`flagshots\` files of this run${runUrl ? ` (${runUrl})` : ''}.`, '');
     }
 
@@ -44,19 +45,28 @@ export function commentBody(summary, { images = new Map(), commit, runUrl } = {}
     }
   }
 
+  // Flags in a Flagsmith experiment: the reviewer sees each arm before real visitors do.
+  for (const flag of summary.flags.filter((f) => f.experiment)) {
+    const { name, status, hypothesis } = flag.experiment;
+    const arms = flag.states.some((s) => s.arm) ? ' The captions in its row say which shot is control and which is treatment.' : '';
+    lines.push(`\`${flag.flag}\` is in the Flagsmith experiment \u201c${cell(name)}\u201d (${status}).${arms}`, '');
+    if (hypothesis) lines.push(`> ${cell(hypothesis)}`, '');
+  }
+
   lines.push('<details><summary>Flags and states</summary>', '');
-  lines.push('| Flag | Visitors get | Also rendered |', '| --- | --- | --- |');
+  lines.push('| Flag | First picture | The others |', '| --- | --- | --- |');
   for (const flag of summary.flags) {
+    const label = (s) => cell(s.arm ? `${s.label} (${s.arm})` : s.label);
     const now = flag.states.find((s) => s.default);
-    const others = flag.states.filter((s) => !s.default).map((s) => cell(s.label));
-    lines.push(`| \`${flag.flag}\` | ${cell(now?.label ?? '')} | ${others.join(', ')} |`);
+    const others = flag.states.filter((s) => !s.default).map(label);
+    lines.push(`| \`${flag.flag}\` | ${now ? label(now) : ''} | ${others.join(', ')} |`);
   }
   const example = summary.flags.flatMap((f) => f.states).find((s) => s.identity)?.identity;
   lines.push('');
   if (example) {
     lines.push(
-      'Each shot loads the page as a Flagsmith identity with an override for one flag, ' +
-        `such as \`${example}\`.`,
+      'For each of the others, Flagshots loads the page as a Flagsmith identity with an override ' +
+        `for that one flag, such as \`${example}\`.`,
       '',
     );
   }

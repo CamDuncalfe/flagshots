@@ -1,17 +1,22 @@
 // A small client for the Flagsmith Admin API (the REST API the dashboard uses).
 // Flagshots needs only a handful of routes, so it calls them with fetch instead of pulling in an SDK.
 // Every route here was checked against self-hosted Flagsmith 2.294.0.
+// The identity overrides go through the Flagsmith CLI instead: see flagsmith-cli.js.
 
 export class FlagsmithAdmin {
   // apiUrl is the API root, for example http://localhost:8000/api/v1
-  constructor(apiUrl, token = null) {
+  // apiKey is an organisation Master API key, the kind the Flagsmith CLI takes too.
+  // The seed signs in with a user token first, because a fresh Flagsmith has no keys yet.
+  constructor(apiUrl, apiKey = null) {
     this.apiUrl = apiUrl.replace(/\/+$/, '');
-    this.token = token;
+    this.apiKey = apiKey;
+    this.token = null;
   }
 
   async request(method, path, body) {
     const headers = { 'Content-Type': 'application/json' };
     if (this.token) headers.Authorization = `Token ${this.token}`;
+    else if (this.apiKey) headers.Authorization = `Api-Key ${this.apiKey}`;
     const res = await fetch(`${this.apiUrl}${path}`, {
       method,
       headers,
@@ -19,7 +24,9 @@ export class FlagsmithAdmin {
     });
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`Flagsmith ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`);
+      const err = new Error(`Flagsmith ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`);
+      err.status = res.status;
+      throw err;
     }
     return text ? JSON.parse(text) : null;
   }
@@ -72,6 +79,22 @@ export class FlagsmithAdmin {
     return existing ?? this.request('POST', createPath, { name, ...body });
   }
 
+  // An organisation Master API key. Flagsmith shows the key once, in the answer to this call.
+  async createMasterApiKey(organisationId, name) {
+    const created = await this.request('POST', `/organisations/${organisationId}/master-api-keys/`, {
+      name,
+      is_admin: true,
+    });
+    return created.key;
+  }
+
+  // Whether a Master API key still works here. A key from an older run is gone after
+  // docker compose down -v, so the seed makes a new one.
+  async apiKeyWorks(apiKey) {
+    const res = await fetch(`${this.apiUrl}/organisations/`, { headers: { Authorization: `Api-Key ${apiKey}` } });
+    return res.ok;
+  }
+
   organisation(name) {
     return this.findOrCreate('/organisations/', '/organisations/', name, {});
   }
@@ -114,36 +137,44 @@ export class FlagsmithAdmin {
     return states.filter((s) => !s.identity && !s.feature_segment);
   }
 
-  // Finds an identity by its exact identifier, or creates it.
-  // The ?q= search matches on part of the identifier, so the result is checked for an exact match.
-  async identity(environmentKey, identifier) {
-    const found = await this.list(
-      `/environments/${environmentKey}/identities/?q=${encodeURIComponent(identifier)}`,
-    );
-    const existing = found.find((i) => i.identifier === identifier);
-    return existing ?? this.request('POST', `/environments/${environmentKey}/identities/`, { identifier });
-  }
-
-  // Sets one identity's override for one feature. Flagsmith refuses a second override for the
-  // same feature and identity, so an existing one is updated in place.
-  async setIdentityOverride(environmentKey, identityId, featureId, { enabled, value }) {
-    const base = `/environments/${environmentKey}/identities/${identityId}/featurestates/`;
-    const body = { feature: featureId, enabled, feature_state_value: value ?? null };
-    const existing = (await this.list(base)).find((s) => s.feature === featureId);
-    if (existing) return this.request('PUT', `${base}${existing.id}/`, body);
-    return this.request('POST', base, body);
-  }
-
   // Asks Flagsmith for an identity's flags the way an app's SDK does, with the client-side
   // environment key and no admin token. Flagshots uses it to check each override took effect.
   async flagsForIdentity(environmentKey, identifier) {
-    const res = await fetch(
-      `${this.apiUrl}/identities/?identifier=${encodeURIComponent(identifier)}`,
-      { headers: { 'X-Environment-Key': environmentKey } },
+    const data = await this.clientRequest(
+      environmentKey,
+      `/identities/?identifier=${encodeURIComponent(identifier)}`,
     );
-    if (!res.ok) throw new Error(`Flagsmith answered ${res.status} for identity ${identifier}`);
-    const data = await res.json();
-    return new Map(data.flags.map((f) => [f.feature.name, { enabled: f.enabled, value: f.feature_state_value }]));
+    return flagMap(data.flags);
+  }
+
+  // The flags an anonymous visitor gets, which is what the default shot shows.
+  async flagsForVisitor(environmentKey) {
+    return flagMap(await this.clientRequest(environmentKey, '/flags/'));
+  }
+
+  async clientRequest(environmentKey, path) {
+    const res = await fetch(`${this.apiUrl}${path}`, { headers: { 'X-Environment-Key': environmentKey } });
+    if (!res.ok) throw new Error(`Flagsmith answered ${res.status} for ${path}`);
+    return res.json();
+  }
+
+  // The environment's experiments that haven't finished, each with its split between control
+  // and the other values. The list route leaves the split out, so each one is fetched on its own.
+  // An instance without experiments (an older Flagsmith, or experimentation switched off)
+  // answers with an error here, and Flagshots carries on without them.
+  async experiments(environmentKey) {
+    let list;
+    try {
+      list = await this.list(`/environments/${environmentKey}/experiments/`);
+    } catch {
+      return [];
+    }
+    const open = list.filter((e) => e.status !== 'completed');
+    return Promise.all(open.map((e) => this.request('GET', `/environments/${environmentKey}/experiments/${e.id}/`)));
+  }
+
+  createExperiment(environmentKey, experiment) {
+    return this.request('POST', `/environments/${environmentKey}/experiments/`, experiment);
   }
 
   updateFeatureState(environmentKey, featureStateId, changes) {
@@ -153,4 +184,11 @@ export class FlagsmithAdmin {
       changes,
     );
   }
+}
+
+// Flag name -> { id, enabled, value }, from the flags list the client-side API returns.
+function flagMap(flags) {
+  return new Map(
+    flags.map((f) => [f.feature.name, { id: f.feature.id, enabled: f.enabled, value: f.feature_state_value }]),
+  );
 }

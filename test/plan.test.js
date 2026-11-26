@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planShots, slug } from '../src/plan.js';
+import { planShots, attachExperiments, slug } from '../src/plan.js';
 
 const bool = (id, name) => ({ id, name, type: 'STANDARD', multivariate_options: [] });
 const multi = (id, name, values) => ({
@@ -62,3 +62,62 @@ test('slug keeps identity names plain', () => {
   assert.equal(slug('Try it free for 14 days'), 'try-it-free-for-14-days');
   assert.equal(slug('!!!'), 'empty');
 });
+
+// checkout_button_copy as the seed makes it: control "Start free trial", options 3 and 4.
+const copyFlag = {
+  id: 3,
+  name: 'checkout_button_copy',
+  type: 'MULTIVARIATE',
+  multivariate_options: [
+    { id: 3, type: 'unicode', string_value: 'Get started' },
+    { id: 4, type: 'unicode', string_value: 'Try it free for 14 days' },
+  ],
+};
+const experiment = (split, extra = {}) => ({
+  feature: { id: 3 },
+  name: 'Sign-up button copy',
+  hypothesis: 'More visitors start a trial when the button says Get started.',
+  status: 'created',
+  experiment_rollout: {
+    feature_state_value: { type: 'string', value: 'Start free trial' },
+    multivariate_feature_state_values: split.map(([option, share]) => ({
+      multivariate_feature_option: option,
+      percentage_allocation: share,
+    })),
+  },
+  ...extra,
+});
+
+test('an experiment labels its control and treatment cells and leaves a 0% value alone', () => {
+  const rows = planShots([copyFlag], [state(3, true, 'Start free trial')]);
+  attachExperiments(rows, [experiment([[3, 50], [4, 0]])]);
+  assert.deepEqual(rows[0].experiment, {
+    name: 'Sign-up button copy',
+    hypothesis: 'More visitors start a trial when the button says Get started.',
+    status: 'not started',
+  });
+  assert.deepEqual(rows[0].cells.map((c) => [c.label, c.arm ?? null]), [
+    ['Start free trial', 'Control, 50%'],
+    ['Get started', 'Treatment, 50%'],
+    ['Try it free for 14 days', null],
+  ]);
+});
+
+test('two treatments are lettered and control gets what is left', () => {
+  const rows = planShots([copyFlag], [state(3, true, 'Start free trial')]);
+  attachExperiments(rows, [experiment([[3, 33.3], [4, 33.3]], { status: 'running' })]);
+  assert.equal(rows[0].experiment.status, 'running');
+  assert.deepEqual(rows[0].cells.map((c) => c.arm), ['Control, 33.4%', 'Treatment A, 33.3%', 'Treatment B, 33.3%']);
+});
+
+test('a split that no longer matches the flag labels no cells, and a completed experiment is skipped', () => {
+  const rows = planShots([copyFlag], [state(3, true, 'Start free trial')]);
+  attachExperiments(rows, [experiment([[9, 50]])]);
+  assert.equal(rows[0].experiment.name, 'Sign-up button copy');
+  assert.ok(rows[0].cells.every((c) => !c.arm));
+
+  const done = planShots([copyFlag], [state(3, true, 'Start free trial')]);
+  attachExperiments(done, [experiment([[3, 50]], { status: 'completed' })]);
+  assert.equal(done[0].experiment, undefined);
+});
+

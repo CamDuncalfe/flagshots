@@ -2,9 +2,9 @@
 //
 //   node scripts/seed.js
 //
-// It signs up a local admin user, creates the organisation, project, environment and features,
-// then writes the environment key to demo/.env.local so the demo app can read its flags,
-// and the settings npm run shots needs to .env.local.
+// It signs up a local admin user, creates the organisation, project, environment, features and
+// experiments and a Master API key, then writes the environment key to demo/.env.local so the demo
+// app can read its flags, and the settings npm run shots needs to .env.local.
 // Running it twice is safe: anything that already exists is reused.
 //
 // FLAGSHOTS_SEED_FILE picks another seed file (the default is flagshots.seed.json in the
@@ -64,12 +64,58 @@ for (const state of await admin.environmentFeatureStates(environment.api_key)) {
   }
 }
 
+// Experiments are created but not started, so the pull request shows both arms before any
+// visitor is put in one. The seed gives each value it doesn't name a 0% share, because
+// Flagsmith wants every value of the flag listed.
+const valueType = (v) => (typeof v === 'number' ? 'integer' : typeof v === 'boolean' ? 'boolean' : 'string');
+const features = await admin.features(project.id);
+const experimentNames = new Set((await admin.experiments(environment.api_key)).map((e) => e.name));
+for (const experiment of seed.experiments ?? []) {
+  if (experimentNames.has(experiment.name)) continue;
+  const feature = features.find((f) => f.name === experiment.flag);
+  if (!feature) throw new Error(`The seed's experiment "${experiment.name}" names a flag that doesn't exist: ${experiment.flag}`);
+  const split = experiment.split ?? {};
+  const control = feature.initial_value;
+  await admin.createExperiment(environment.api_key, {
+    feature: feature.id,
+    name: experiment.name,
+    hypothesis: experiment.hypothesis,
+    experiment_rollout: {
+      enabled: true,
+      rollout_percentage: 100,
+      feature_state_value: { type: valueType(control), value: String(control) },
+      multivariate_feature_state_values: feature.multivariate_options.map((o) => ({
+        multivariate_feature_option: o.id,
+        percentage_allocation: split[o.string_value ?? o.integer_value ?? o.boolean_value] ?? 0,
+      })),
+    },
+  });
+  console.log(`Created the experiment ${experiment.name}`);
+}
+
+// npm run shots and the Flagsmith CLI both use an organisation Master API key, not the
+// sign-in token above. Flagsmith shows a new key once, so a key from an earlier run is
+// kept in .env.local and reused while it still works.
+let apiKey = null;
+if (!process.env.GITHUB_ENV) {
+  try {
+    process.loadEnvFile(new URL('../.env.local', import.meta.url));
+    apiKey = process.env.FLAGSMITH_ADMIN_API_KEY ?? null;
+  } catch {
+    // No .env.local yet.
+  }
+}
+if (!apiKey || !(await admin.apiKeyWorks(apiKey))) {
+  apiKey = await admin.createMasterApiKey(organisation.id, 'Flagshots');
+  console.log('Created a Master API key for Flagshots');
+}
+
 if (process.env.GITHUB_ENV) {
-  // The token can change flags on this Flagsmith, so it's hidden from the job log.
-  console.log(`::add-mask::${admin.token}`);
+  // The key can change flags on this Flagsmith, so it's hidden from the job log.
+  console.log(`::add-mask::${apiKey}`);
   await appendFile(
     process.env.GITHUB_ENV,
-    `FLAGSMITH_API_URL=${apiUrl}\nFLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\nFLAGSMITH_ADMIN_TOKEN=${admin.token}\n`,
+    `FLAGSMITH_API_URL=${apiUrl}\nFLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\nFLAGSMITH_ADMIN_API_KEY=${apiKey}\n`,
   );
   console.log(`Seeded ${seed.project} / ${seed.environment}, environment key ${environment.api_key}`);
 } else {
@@ -79,10 +125,10 @@ if (process.env.GITHUB_ENV) {
     `VITE_FLAGSMITH_API_URL=${browserApiUrl}/\nVITE_FLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\n`,
   );
 
-  // Settings for npm run shots on this machine. .env.local is in .gitignore: the token is an admin login.
+  // Settings for npm run shots on this machine. .env.local is in .gitignore: the key is an admin key.
   await writeFile(
     new URL('../.env.local', import.meta.url),
-    `FLAGSMITH_API_URL=${apiUrl}\nFLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\nFLAGSMITH_ADMIN_TOKEN=${admin.token}\n`,
+    `FLAGSMITH_API_URL=${apiUrl}\nFLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\nFLAGSMITH_ADMIN_API_KEY=${apiKey}\n`,
   );
 
   console.log(`Flagsmith dashboard: ${apiUrl.replace(/\/api\/v1$/, '')}`);

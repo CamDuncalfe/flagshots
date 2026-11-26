@@ -39,8 +39,10 @@ export async function buildGrid(browser, rows, rendered, outFile) {
     rows: rows.map((row) => ({
       flag: row.flag,
       description: row.description,
+      experiment: row.experiment ?? null,
       cells: row.cells.map((cell) => ({
         label: cell.label,
+        arm: cell.arm ?? null,
         quoted: typeof cell.value === 'string' && cell.enabled && cell.label === cell.value,
         isDefault: cell.isDefault,
         image: cell.identity ?? 'default',
@@ -101,6 +103,10 @@ const GRID_HTML = /* html */ `<!doctype html>
   canvas { display: block; width: 100%; height: auto; }
   figcaption { margin-top: 8px; font-size: 13px; line-height: 1.4; text-wrap: balance; overflow-wrap: anywhere; }
   .tag { color: var(--muted); }
+  .arm { display: block; color: var(--muted); }
+  .experiment { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+  .experiment p { margin: 0; font-size: 13px; line-height: 1.4; text-wrap: pretty; }
+  .experiment .hypothesis { margin-top: 2px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -112,6 +118,12 @@ const data = __DATA__;
 // It absorbs tiny anti-aliasing differences without hiding a real change.
 const THRESHOLD = 24;
 const PADDING = 32;
+// A cropped shot is drawn at half its size or more, so a button label stays readable. A row with
+// more shots than fit at that size wraps onto a second line.
+const MIN_SCALE = 0.5;
+const MAX_PER_LINE = 3;
+const CONTENT_WIDTH = ${GRID_WIDTH} - 2 * 24;
+const GAP = 16; // the gap between shots in .cells above
 const MIN_WIDTH = 560;
 const MIN_HEIGHT = 400;
 
@@ -177,6 +189,78 @@ function cropAround(box, pageWidth, pageHeight) {
   return { x: Math.round(left), y: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) };
 }
 
+// How far an edge of the crop may move to find a blank line, and the room left around the content.
+const SNAP_LIMIT = 240;
+const MARGIN = 24;
+// A blank line allows far less colour difference than THRESHOLD: a card's 1 px border, smeared
+// over two pixel columns by anti-aliasing, has to count as content.
+const BLANK_THRESHOLD = 4;
+
+// Whether a line of pixels is one flat colour in every shot of the row, like the gap between two
+// cards. A crop edge on a line like that cuts nothing in half. Past the edge of a page counts as blank.
+function blankLine(shots, vertical, at, from, to) {
+  const first = shots[0];
+  if (vertical ? at <= 0 || at >= first.width : at <= 0 || at >= first.height) return true;
+  const base = (vertical ? from * first.width + at : at * first.width + from) * 4;
+  for (const shot of shots) {
+    for (let k = from; k < to; k++) {
+      const x = vertical ? at : k;
+      const y = vertical ? k : at;
+      if (x >= shot.width || y >= shot.height) return false;
+      const i = (y * shot.width + x) * 4;
+      if (
+        Math.abs(shot.data[i] - first.data[base]) > BLANK_THRESHOLD ||
+        Math.abs(shot.data[i + 1] - first.data[base + 1]) > BLANK_THRESHOLD ||
+        Math.abs(shot.data[i + 2] - first.data[base + 2]) > BLANK_THRESHOLD
+      ) return false;
+    }
+  }
+  return true;
+}
+
+// Fits the crop to whole things on the page. Each edge first moves to the nearest blank line,
+// outwards or inwards, so the crop holds whole cards and buttons instead of slicing through one.
+// Then each edge moves in past any empty page to the first content, and back out by MARGIN
+// where the page is blank there.
+// An edge never moves inside the area that changed, and with no blank line within SNAP_LIMIT
+// it stays where it was.
+function fitToContent(crop, box, shots) {
+  const width = shots[0].width;
+  const height = shots[0].height;
+  const e = { left: crop.x, top: crop.y, right: crop.x + crop.width, bottom: crop.y + crop.height };
+  // For each edge: which way is out, how far in it may go, and whether its line runs up and down.
+  const sides = {
+    left: { out: -1, limit: box.left, vertical: true },
+    right: { out: 1, limit: box.right, vertical: true },
+    top: { out: -1, limit: box.top, vertical: false },
+    bottom: { out: 1, limit: box.bottom, vertical: false },
+  };
+  const blank = (side, at) => {
+    const { vertical } = sides[side];
+    return blankLine(shots, vertical, at, vertical ? e.top : e.left, vertical ? e.bottom : e.right);
+  };
+  // Whether a line sits outside the changed area, so the edge may stop there.
+  const outside = (side, at) => sides[side].out * (at - sides[side].limit) >= 0;
+
+  for (const side of ['left', 'right', 'top', 'bottom']) {
+    const { out } = sides[side];
+    for (let d = 0; d <= SNAP_LIMIT; d++) {
+      if (blank(side, e[side] + out * d)) { e[side] += out * d; break; }
+      const inner = e[side] - out * d;
+      if (outside(side, inner) && blank(side, inner)) { e[side] = inner; break; }
+    }
+  }
+  for (const side of ['top', 'bottom', 'left', 'right']) {
+    const { out } = sides[side];
+    while (outside(side, e[side] - out) && blank(side, e[side] - out)) e[side] -= out;
+    for (let k = 0; k < MARGIN && blank(side, e[side] + out); k++) e[side] += out;
+  }
+
+  const left = Math.max(0, e.left), top = Math.max(0, e.top);
+  const right = Math.min(width, e.right), bottom = Math.min(height, e.bottom);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -217,7 +301,8 @@ async function build() {
     // When the change covers most of the page (a colour scheme, a new layout), the row shows
     // whole pages: a crop that large only cuts off the edges.
     const whole = { x: 0, y: 0, width: pageWidth, height: pageHeight };
-    let crop = union ? cropAround(union, pageWidth, pageHeight) : whole;
+    const shots = row.cells.map((c) => px[c.image]);
+    let crop = union ? fitToContent(cropAround(union, pageWidth, pageHeight), union, shots) : whole;
     if (crop.width * crop.height > 0.55 * pageWidth * pageHeight) crop = whole;
     measured.push({ flag: row.flag, changed: Boolean(union), crop });
 
@@ -225,9 +310,24 @@ async function build() {
     section.append(el('p', 'flag', row.flag));
     const note = [row.description, union ? '' : 'No visible change on this page.'].filter(Boolean).join(' ');
     if (note) section.append(el('p', 'note', note));
+    if (row.experiment) {
+      // The experiment this flag is in, read from Flagsmith: its name, whether it has started,
+      // and the hypothesis the team wrote for it.
+      const box = el('div', 'experiment');
+      box.append(el('p', null, 'Experiment \u201c' + row.experiment.name + '\u201d, ' + row.experiment.status));
+      if (row.experiment.hypothesis) box.append(el('p', 'hypothesis', row.experiment.hypothesis));
+      section.append(box);
+    }
 
     const cells = el('div', 'cells');
-    cells.style.setProperty('--columns', columns);
+    // Three shots a line at most, the same width in every row, so whole pages stay big enough to
+    // compare. A cropped row takes fewer a line when it needs them bigger to stay at MIN_SCALE.
+    let perLine = Math.min(columns, MAX_PER_LINE);
+    if (crop !== whole) {
+      const scale = (n) => (CONTENT_WIDTH - GAP * (n - 1)) / n / crop.width;
+      while (perLine > 1 && scale(perLine) < MIN_SCALE) perLine--;
+    }
+    cells.style.setProperty('--columns', perLine);
     for (const cell of row.cells) {
       const figure = el('figure');
       const frame = el('div', 'frame');
@@ -248,6 +348,7 @@ async function build() {
         caption.append(' ');
         caption.append(el('span', 'tag', '(default)'));
       }
+      if (cell.arm) caption.append(el('span', 'arm', cell.arm));
       figure.append(caption);
       cells.append(figure);
     }
