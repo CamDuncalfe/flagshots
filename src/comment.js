@@ -28,11 +28,12 @@ export function commentBody(summary, { images = new Map(), commit, runUrl } = {}
   );
 
   for (const page of summary.pages) {
-    lines.push(`#### ${page.name} \`${page.path}\``, '');
     const url = images.get(page.slug);
     if (url) {
+      // The grid image has the page's name and path at the top, so it needs no heading here.
       lines.push(`![${page.name} in each flag state](${url})`, '');
     } else {
+      lines.push(`#### ${page.name} \`${page.path}\``, '');
       lines.push(`The grid for ${page.name} is in the \`flagshots\` files of this run${runUrl ? ` (${runUrl})` : ''}.`, '');
     }
 
