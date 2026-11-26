@@ -45,14 +45,15 @@ for (const feature of seed.features) {
   console.log(`Created ${feature.name}`);
 }
 
-// default_enabled only applies to environments made after the feature, so set each
-// environment state to the seed's on or off as well.
+// On a later run, put each flag back to the seed's on or off, in case someone switched it
+// in the dashboard while trying things out.
 const wanted = new Map(seed.features.map((f) => [f.name, f.enabled]));
 const byId = new Map((await admin.features(project.id)).map((f) => [f.id, f.name]));
 for (const state of await admin.environmentFeatureStates(environment.api_key)) {
   const name = byId.get(state.feature);
   if (wanted.has(name) && state.enabled !== wanted.get(name)) {
     await admin.updateFeatureState(environment.api_key, state.id, { enabled: wanted.get(name) });
+    console.log(`Turned ${name} ${wanted.get(name) ? 'on' : 'off'}`);
   }
 }
 
