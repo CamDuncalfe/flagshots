@@ -3,8 +3,8 @@
 // One screenshot is the page as an ordinary visitor sees it today (the "default" shot).
 // Then, for each flag, one screenshot per state the flag can be in that isn't already the
 // default. Only that one flag changes in each shot; the other flags keep their real values.
-// The demo's four flags make six shots plus the default this way. Every combination
-// of them would be eighteen.
+// The demo's four flags make six shots plus the default this way. Their combinations
+// come to 36 (3 x 2 x 3 x 2).
 //
 // This file only does arithmetic on data: no network, no browser. test/plan.test.js covers it.
 
