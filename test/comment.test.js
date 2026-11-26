@@ -26,7 +26,7 @@ test('starts with the marker so the next run can find the comment', () => {
 test('links each page image and names the commit', () => {
   const body = commentBody(summary, { images: new Map([['home', 'https://example.com/home.png']]), commit: 'abc1234def' });
   assert.match(body, /!\[Home in each flag state\]\(https:\/\/example\.com\/home\.png\)/);
-  assert.match(body, /Screenshots from abc1234\./);
+  assert.match(body, /Taken at abc1234\./);
 });
 
 test('points to the run files when there is no image link (fork pull requests)', () => {
@@ -58,7 +58,7 @@ test('names the experiment a flag is in, quotes its hypothesis and labels the ar
     ],
   };
   const body = commentBody(withExperiment);
-  assert.match(body, /`checkout_button_copy` is in the Flagsmith experiment \u201cSign-up button copy\u201d \(not started\)\. Its row labels the control and treatment shots\./);
+  assert.match(body, /`checkout_button_copy` is in the Flagsmith experiment \u201cSign-up button copy\u201d \(not started\)\. The captions in its row say which shot is control and which is treatment\./);
   assert.match(body, /> Shorter wins\./);
   assert.match(body, /\| Start free trial \(Control, 50%\) \| Get started \(Treatment, 50%\) \|/);
 });

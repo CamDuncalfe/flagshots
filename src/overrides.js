@@ -43,9 +43,10 @@ export async function applyOverrides(cli, admin, environmentKey, rows) {
       }
     }
   }
-  console.log(`Set ${set} identity overrides with the Flagsmith CLI`);
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  console.log(`Set ${plural(set, 'identity override')} with the Flagsmith CLI`);
   if (pinned) {
-    console.log(`Held ${pinned} split or experiment flag values at the default so each shot changes one flag`);
+    console.log(`Held ${plural(pinned, 'split or experiment flag value')} at the default so each shot changes one flag`);
   }
 }
 

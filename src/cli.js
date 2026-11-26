@@ -57,13 +57,46 @@ async function waitForApp(baseUrl, timeoutMs) {
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
-  throw new Error(`Nothing answered at ${baseUrl} after ${timeoutMs / 1000} seconds. Is the app running?`);
+  throw new Error(
+    `Nothing answered at ${baseUrl} after ${timeoutMs / 1000} seconds. Start the app first, or fix baseUrl ` +
+      'in flagshots.config.json. In the Action, start-command has to serve the app there: the "Show the ' +
+      'app\'s log" step below prints what it said.',
+  );
 }
+
+// Each setting, with the action input that fills it in a GitHub Actions job.
+const INPUTS = { FLAGSMITH_ENVIRONMENT_KEY: 'environment-key', FLAGSMITH_ADMIN_API_KEY: 'admin-api-key' };
 
 function requireEnv(name) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is not set. Run npm run seed for a local Flagsmith, or set it yourself.`);
+  if (!value) {
+    throw new Error(
+      `${name} is not set. On your machine, npm run seed writes it to .env.local for the local Flagsmith. ` +
+        `In the Action, set the ${INPUTS[name]} input, or leave flagsmith-api-url empty so Flagshots runs its own Flagsmith.`,
+    );
+  }
   return value;
+}
+
+// The first Admin API call. A wrong key or environment fails here, so the message says which.
+async function findEnvironment(admin, environmentKey) {
+  try {
+    return await admin.environmentByKey(environmentKey);
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
+      throw new Error(
+        `Flagsmith turned down the admin key (${err.status}). FLAGSMITH_ADMIN_API_KEY (the admin-api-key input) ` +
+          'has to be an organisation Master API key, from Organisation settings, API Keys.',
+      );
+    }
+    if (err.status === 404) {
+      throw new Error(
+        `Flagsmith has no environment with the key ${environmentKey}. FLAGSMITH_ENVIRONMENT_KEY (the ` +
+          'environment-key input) is the client-side key from the environment\'s SDK keys page.',
+      );
+    }
+    throw err;
+  }
 }
 
 async function main() {
@@ -91,7 +124,7 @@ async function main() {
   await waitForApp(config.baseUrl, config.waitSeconds * 1000);
 
   // The environment key tells us the project, and the project has the features.
-  const environment = await admin.environmentByKey(environmentKey);
+  const environment = await findEnvironment(admin, environmentKey);
   const features = await admin.features(environment.project);
   const states = await admin.environmentFeatureStates(environmentKey);
   const only = args.flags ? args.flags.split(',').map((f) => f.trim()) : config.flags;

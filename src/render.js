@@ -34,7 +34,13 @@ async function shoot(browser, url, file, options) {
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
   } catch (err) {
-    const extra = errors.length ? `\nThe page logged: ${errors.join(' | ')}` : '';
+    let extra = errors.length ? `\nThe page logged: ${errors.join(' | ')}` : '';
+    // The usual cause: the app never marks the page as ready, or its flags never arrive.
+    if (options.readySelector && err.name === 'TimeoutError') {
+      extra +=
+        `\nThe page never matched readySelector ${JSON.stringify(options.readySelector)} from flagshots.config.json. ` +
+        'The app should set it once it has drawn the page with its flags (the demo sets data-flags-ready on <html>).';
+    }
     throw new Error(`Could not take the screenshot of ${url}: ${err.message.split('\n')[0]}${extra}`);
   } finally {
     await context.close();

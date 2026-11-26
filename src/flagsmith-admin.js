@@ -24,7 +24,9 @@ export class FlagsmithAdmin {
     });
     const text = await res.text();
     if (!res.ok) {
-      throw new Error(`Flagsmith ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`);
+      const err = new Error(`Flagsmith ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`);
+      err.status = res.status;
+      throw err;
     }
     return text ? JSON.parse(text) : null;
   }

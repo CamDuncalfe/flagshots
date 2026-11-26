@@ -20,10 +20,10 @@ function cell(text) {
 export function commentBody(summary, { images = new Map(), commit, runUrl } = {}) {
   const lines = [MARKER, '### Flagshots', ''];
 
-  const from = commit ? ` Screenshots from ${commit.slice(0, 7)}.` : '';
+  const from = commit ? ` Taken at ${commit.slice(0, 7)}.` : '';
   lines.push(
-    `Every state of each flag in Flagsmith (${summary.environment}), a row per flag. ` +
-      `The first column is what visitors get today.${from}`,
+    `Flagshots opened the app once for each state of each flag in Flagsmith (${summary.environment}). ` +
+      `Each flag has a row, and the first picture in it is what visitors see today.${from}`,
     '',
   );
 
@@ -47,13 +47,13 @@ export function commentBody(summary, { images = new Map(), commit, runUrl } = {}
   // Flags in a Flagsmith experiment: the reviewer sees each arm before real visitors do.
   for (const flag of summary.flags.filter((f) => f.experiment)) {
     const { name, status, hypothesis } = flag.experiment;
-    const arms = flag.states.some((s) => s.arm) ? ' Its row labels the control and treatment shots.' : '';
+    const arms = flag.states.some((s) => s.arm) ? ' The captions in its row say which shot is control and which is treatment.' : '';
     lines.push(`\`${flag.flag}\` is in the Flagsmith experiment \u201c${cell(name)}\u201d (${status}).${arms}`, '');
     if (hypothesis) lines.push(`> ${cell(hypothesis)}`, '');
   }
 
   lines.push('<details><summary>Flags and states</summary>', '');
-  lines.push('| Flag | Visitors get | Also rendered |', '| --- | --- | --- |');
+  lines.push('| Flag | First picture | The others |', '| --- | --- | --- |');
   for (const flag of summary.flags) {
     const label = (s) => cell(s.arm ? `${s.label} (${s.arm})` : s.label);
     const now = flag.states.find((s) => s.default);
@@ -64,8 +64,8 @@ export function commentBody(summary, { images = new Map(), commit, runUrl } = {}
   lines.push('');
   if (example) {
     lines.push(
-      'Each shot loads the page as a Flagsmith identity with an override for one flag, ' +
-        `such as \`${example}\`.`,
+      'For each of the others, Flagshots loads the page as a Flagsmith identity with an override ' +
+        `for that one flag, such as \`${example}\`.`,
       '',
     );
   }

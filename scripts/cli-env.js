@@ -12,7 +12,10 @@ import { apiKeyVariable, apiRoot } from '../src/flagsmith-cli.js';
 const apiUrl = process.env.FLAGSMITH_API_URL;
 const apiKey = process.env.FLAGSMITH_ADMIN_API_KEY;
 if (!apiUrl || !apiKey) {
-  console.error('FLAGSMITH_API_URL and FLAGSMITH_ADMIN_API_KEY need to be set before this step');
+  console.error(
+    '::error::Flagshots has no Flagsmith to work with. Leave flagsmith-api-url empty to run Flagsmith in the job, ' +
+      'or set flagsmith-api-url, environment-key and admin-api-key for your own Flagsmith.',
+  );
   process.exit(1);
 }
 

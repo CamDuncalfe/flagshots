@@ -72,6 +72,10 @@ runs:
         ENVIRONMENT_KEY: ${{ inputs.environment-key }}
         ADMIN_API_KEY: ${{ inputs.admin-api-key }}
       run: |
+        if [ -z "$ENVIRONMENT_KEY" ] || [ -z "$ADMIN_API_KEY" ]; then
+          echo "::error::With flagsmith-api-url set, Flagshots also needs environment-key (the environment's client-side key) and admin-api-key (an organisation Master API key)."
+          exit 1
+        fi
         echo "::add-mask::$ADMIN_API_KEY"
         {
           echo "FLAGSMITH_API_URL=$API_URL"
