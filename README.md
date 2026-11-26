@@ -4,7 +4,7 @@ Flagshots is a GitHub Action that screenshots your app in each state of each Fla
 
 ![The Flagshots comment on a pull request: a row for each flag, with a screenshot of each of its states](docs/comment.png)
 
-When a pull request changes a page behind a feature flag, the reviewer opens the preview and sees the version an ordinary visitor gets. The off state, the other values of a multivariate flag and the treatment arm of an experiment go to production without anyone having looked at them. Flagshots shows the reviewer each of those versions before the pull request is merged.
+When a pull request changes a page behind a feature flag, the reviewer opens the preview and sees the version an ordinary visitor gets. Nobody looks at the off state, the other values of a multivariate flag or the treatment arm of an experiment before they reach production. Flagshots shows the reviewer each of those versions before the pull request is merged.
 
 Flagsmith's GitHub integration links flags to pull requests and says whether each one is on. Flagshots adds what the page looks like in each state, and you can run the two together.
 
@@ -23,9 +23,9 @@ Flagsmith decides what each screenshot shows. Flagshots sets real identity overr
 4. Before it takes any screenshot, Flagshots asks Flagsmith for each identity's flags the way your app will, with the client-side key, and stops the run if any flag is wrong.
 5. When a flag is in a Flagsmith experiment, Flagshots reads the experiment from the API. Its row in the grid shows the experiment's name, status and hypothesis, and the captions say which shot is control and which is treatment, with each one's share of visitors. Flagsmith puts identities into an experiment's buckets even before it starts, so Flagshots also gives each identity an override that holds the experiment's flag at the control value in the other rows.
 
-The identities and overrides are the only things Flagshots writes. Your environment's own flag settings don't change, so real visitors see nothing different.
+The identities and overrides are the only things Flagshots writes. It leaves your environment's own flag settings alone, and real visitors see nothing different.
 
-Flagsmith can run inside the CI job. The action starts Flagsmith 2.294.0 and Postgres with `docker compose` on the runner, creates the flags from a seed file in your repo, and throws the whole thing away when the job ends. You don't need a Flagsmith account for that. If you already run Flagsmith, self-hosted or on flagsmith.com, you can point the action at it instead.
+Flagsmith can run inside the CI job. The action starts Flagsmith 2.294.0 and Postgres with `docker compose` on the runner, creates the flags from a seed file in your repo, and throws the whole thing away when the job ends. You don't need a Flagsmith account for that. If you run Flagsmith yourself, you can point the action at it instead.
 
 ## Quick start
 
@@ -62,7 +62,7 @@ When the page has drawn with its flags, set an attribute Flagshots can wait for,
 | Key | What it does | Default |
 | --- | --- | --- |
 | `baseUrl` | Where your app is served during the job | `http://localhost:5173` |
-| `pages` | The pages to screenshot, each with a `name` and a `path`. Each page gets its own grid. | `[{ "name": "Home", "path": "/" }]` |
+| `pages` | The pages to screenshot, each with a `name` and a `path`. Flagshots makes one grid image per page. | `[{ "name": "Home", "path": "/" }]` |
 | `readySelector` | A selector that matches once the page has drawn with its flags | none: Flagshots waits for the network to go quiet |
 | `identityParam` | The URL parameter that carries the identity | `flagshots_identity` |
 | `viewport` | The browser window size | `{ "width": 1280, "height": 800 }` |
@@ -171,7 +171,7 @@ docker compose up -d      # Postgres and Flagsmith 2.294.0 on http://localhost:8
 npm run seed              # the demo project, its four flags and one experiment
 npm run demo:build
 npm run demo:preview      # in a second terminal: the demo on http://localhost:5173
-npm run shots             # the grid lands in .flagshots/home.png
+npm run shots             # writes the grid to .flagshots/home.png
 ```
 
 `npm run seed` signs up a local admin on the fresh Flagsmith (`admin@flagshots.example`, password `local-flagshots-admin-2026`, both set in `scripts/seed.js`), creates the organisation, project, environment, flags and experiment, and makes a Master API key. It writes the keys to `.env.local` and `demo/.env.local`, which git ignores. You can run it again at any time: it reuses what's there and puts each flag back to the seed's on or off.
@@ -187,7 +187,7 @@ Sign in to the dashboard at http://localhost:8000 with the admin account to chan
 - `pricing_badge` turns a New badge on the Team plan on and off.
 - `dark_mode` turns the dark colour scheme on and off.
 
-This repo's workflow runs the action against Kettle on each pull request. Pull request 1 changes the plan cards to a warmer white, and its comment showed light text on near-white cards with `dark_mode` on, which the second push fixed. Pull request 2 adds a fourth button label in the seed file, and the comment shows it with no other change.
+This repo's workflow runs the action against Kettle on each pull request. Pull request 1 changes the plan cards to a warmer white. Its first comment showed light text on near-white cards with `dark_mode` on, and I fixed that in the second push. Pull request 2 adds a fourth button label in the seed file, and the comment shows it with no other change.
 
 ## What's in the repo
 
@@ -207,9 +207,9 @@ GitHub's API can't attach an image to a comment, so the job commits each grid to
 - Each screenshot changes one flag. Flagshots doesn't render combinations of flags.
 - It screenshots every flag in the environment unless you list some in `flags`. It doesn't yet pick out only the flags a pull request touches.
 - A flag that's on with no value can't be held at that state with the CLI. If that ever happens, the check before the screenshots stops the run.
-- Flagshots was built and tested against Flagsmith 2.294.0, the version in `docker-compose.yml`.
+- I built and tested Flagshots against Flagsmith 2.294.0, the version in `docker-compose.yml`.
 
-These haven't been tested yet: the action against your own Flagsmith with `flagsmith-api-url` (only the Flagsmith inside the job has run in CI so far), and image links in the comment on a private repo.
+I haven't tested these yet: the action against your own Flagsmith with `flagsmith-api-url` (only the Flagsmith inside the job has run in CI so far), the action against flagsmith.com, and image links in the comment on a private repo.
 
 ## Licence
 
