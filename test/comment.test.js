@@ -27,12 +27,15 @@ test('links each page image and names the commit', () => {
   const body = commentBody(summary, { images: new Map([['home', 'https://example.com/home.png']]), commit: 'abc1234def' });
   assert.match(body, /!\[Home in each flag state\]\(https:\/\/example\.com\/home\.png\)/);
   assert.match(body, /Taken at abc1234\./);
+  // The image carries the page name, so there's no heading above it.
+  assert.doesNotMatch(body, /#### Home/);
 });
 
 test('points to the run files when there is no image link (fork pull requests)', () => {
   const body = commentBody(summary, { runUrl: 'https://github.com/o/r/actions/runs/1' });
   assert.match(body, /The grid for Home is in the `flagshots` files of this run \(https:\/\/github\.com\/o\/r\/actions\/runs\/1\)/);
   assert.doesNotMatch(body, /!\[/);
+  assert.match(body, /#### Home `\/`/);
 });
 
 test('names flags that look the same in every state on a page', () => {
