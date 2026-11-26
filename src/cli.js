@@ -6,8 +6,10 @@
 // It reads three settings from the environment (or from .env.local, which npm run seed writes):
 //   FLAGSMITH_API_URL          the API root, http://localhost:8000/api/v1 by default
 //   FLAGSMITH_ENVIRONMENT_KEY  the client-side key of the environment to screenshot
-//   FLAGSMITH_ADMIN_TOKEN      an Admin API token, used to read flags and set identity overrides
+//   FLAGSMITH_ADMIN_API_KEY    an organisation Master API key, used to read flags and set identity overrides
 //
+// The overrides are set with the Flagsmith CLI, so the flagsmith binary has to be on the PATH
+// (or FLAGSHOTS_FLAGSMITH_CLI has to point at it).
 // The app should be running at the config's baseUrl, or starting up: Flagshots waits for it.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -15,6 +17,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from 'playwright';
 import { FlagsmithAdmin } from './flagsmith-admin.js';
+import { FlagsmithCli } from './flagsmith-cli.js';
 import { planShots, attachExperiments, slug } from './plan.js';
 import { applyOverrides, checkOverrides } from './overrides.js';
 import { renderPages } from './render.js';
@@ -81,7 +84,8 @@ async function main() {
   const config = await loadConfig(args.config);
   const apiUrl = process.env.FLAGSMITH_API_URL ?? 'http://localhost:8000/api/v1';
   const environmentKey = requireEnv('FLAGSMITH_ENVIRONMENT_KEY');
-  const admin = new FlagsmithAdmin(apiUrl, requireEnv('FLAGSMITH_ADMIN_TOKEN'));
+  const apiKey = requireEnv('FLAGSMITH_ADMIN_API_KEY');
+  const admin = new FlagsmithAdmin(apiUrl, apiKey);
 
   await admin.waitUntilReady(config.waitSeconds * 1000);
   await waitForApp(config.baseUrl, config.waitSeconds * 1000);
@@ -103,7 +107,9 @@ async function main() {
   const shots = rows.reduce((n, r) => n + r.cells.length - 1, 1);
   console.log(`${rows.length} flags in ${environment.name}, ${shots} shots per page`);
 
-  await applyOverrides(admin, environmentKey, rows);
+  const cli = new FlagsmithCli({ apiUrl, masterKey: apiKey, environmentKey, projectId: environment.project });
+  console.log(`Setting the overrides with ${await cli.version()}`);
+  await applyOverrides(cli, admin, environmentKey, rows);
   await checkOverrides(admin, environmentKey, rows);
 
   await mkdir(args.out, { recursive: true });

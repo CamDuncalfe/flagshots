@@ -3,6 +3,9 @@
 // When the app loads as flagshots-hero_layout-split, Flagsmith answers with hero_layout set to
 // "split" and every other flag at its normal value. The environment's own settings aren't
 // touched, so real visitors see no change.
+//
+// The overrides are written with the Flagsmith CLI (cli), and read back over the client-side
+// API (admin), the same way the app reads its flags.
 
 // Two flags count as showing the same thing when both are off, or both are on with one value.
 function same(a, b) {
@@ -15,18 +18,17 @@ function describe(flag) {
   return flag.enabled ? `on with ${JSON.stringify(flag.value)}` : 'off';
 }
 
-export async function applyOverrides(admin, environmentKey, rows) {
+export async function applyOverrides(cli, admin, environmentKey, rows) {
   const visitor = await admin.flagsForVisitor(environmentKey);
+  let set = 0;
   let pinned = 0;
 
   for (const row of rows) {
     for (const cell of row.cells) {
       if (!cell.identity) continue;
-      const identity = await admin.identity(environmentKey, cell.identity);
-      await admin.setIdentityOverride(environmentKey, identity.id, row.featureId, {
-        enabled: cell.enabled,
-        value: cell.value,
-      });
+      // The CLI creates the identity the first time and updates the override on a rerun.
+      await cli.setIdentityOverride(cell.identity, row.flag, { enabled: cell.enabled, value: cell.value });
+      set++;
 
       // Flagsmith puts every identity into a bucket for a flag that's in an experiment or has a
       // percentage split, so a shot identity could land on a treatment value of some other flag.
@@ -36,11 +38,12 @@ export async function applyOverrides(admin, environmentKey, rows) {
       for (const [name, flag] of flags) {
         const want = visitor.get(name);
         if (name === row.flag || !want || same(flag, want)) continue;
-        await admin.setIdentityOverride(environmentKey, identity.id, flag.id, { enabled: want.enabled, value: want.value });
+        await cli.setIdentityOverride(cell.identity, name, { enabled: want.enabled, value: want.value });
         pinned++;
       }
     }
   }
+  console.log(`Set ${set} identity overrides with the Flagsmith CLI`);
   if (pinned) {
     console.log(`Held ${pinned} split or experiment flag values at the default so each shot changes one flag`);
   }

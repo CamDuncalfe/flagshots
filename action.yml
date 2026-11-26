@@ -26,7 +26,9 @@ inputs:
     description: Client-side key of the environment to screenshot (with flagsmith-api-url)
     default: ''
   admin-api-key:
-    description: Admin API token for reading flags and setting identity overrides (with flagsmith-api-url)
+    description: >-
+      An organisation Master API key (Organisation settings, API Keys) for reading flags and
+      setting identity overrides with the Flagsmith CLI (with flagsmith-api-url)
     default: ''
   flags:
     description: Comma-separated flag names to render. Empty renders every flag.
@@ -68,14 +70,28 @@ runs:
       env:
         API_URL: ${{ inputs.flagsmith-api-url }}
         ENVIRONMENT_KEY: ${{ inputs.environment-key }}
-        ADMIN_TOKEN: ${{ inputs.admin-api-key }}
+        ADMIN_API_KEY: ${{ inputs.admin-api-key }}
       run: |
-        echo "::add-mask::$ADMIN_TOKEN"
+        echo "::add-mask::$ADMIN_API_KEY"
         {
           echo "FLAGSMITH_API_URL=$API_URL"
           echo "FLAGSMITH_ENVIRONMENT_KEY=$ENVIRONMENT_KEY"
-          echo "FLAGSMITH_ADMIN_TOKEN=$ADMIN_TOKEN"
+          echo "FLAGSMITH_ADMIN_API_KEY=$ADMIN_API_KEY"
         } >> "$GITHUB_ENV"
+
+    # Flagshots sets its identity overrides with the Flagsmith CLI.
+    - name: Point the Flagsmith CLI at this Flagsmith
+      id: flagsmith-cli
+      shell: bash
+      run: |
+        root="$(node "$GITHUB_ACTION_PATH/scripts/cli-env.js")"
+        echo "api-url=$root" >> "$GITHUB_OUTPUT"
+
+    - name: Install the Flagsmith CLI
+      uses: Flagsmith/setup-cli@c7154aaa37dff8aca0b66afc1e6722e7ad00c115 # v1
+      with:
+        api-url: ${{ steps.flagsmith-cli.outputs.api-url }}
+        cli-version: v2.0.0
 
     # The app is built here, after the seed, because a front end usually bakes the
     # environment key in at build time. It keeps running after this step ends.
