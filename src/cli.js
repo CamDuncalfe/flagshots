@@ -8,7 +8,7 @@
 //   FLAGSMITH_ENVIRONMENT_KEY  the client-side key of the environment to screenshot
 //   FLAGSMITH_ADMIN_TOKEN      an Admin API token, used to read flags and set identity overrides
 //
-// The app has to be running at the config's baseUrl before this starts.
+// The app should be running at the config's baseUrl, or starting up: Flagshots waits for it.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -42,6 +42,21 @@ async function loadConfig(file) {
   return config;
 }
 
+// Waits until something answers at the app's address. In CI the app is still building
+// in the background when this starts.
+async function waitForApp(baseUrl, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      await fetch(baseUrl);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw new Error(`Nothing answered at ${baseUrl} after ${timeoutMs / 1000} seconds. Is the app running?`);
+}
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set. Run npm run seed for a local Flagsmith, or set it yourself.`);
@@ -69,6 +84,7 @@ async function main() {
   const admin = new FlagsmithAdmin(apiUrl, requireEnv('FLAGSMITH_ADMIN_TOKEN'));
 
   await admin.waitUntilReady(config.waitSeconds * 1000);
+  await waitForApp(config.baseUrl, config.waitSeconds * 1000);
 
   // The environment key tells us the project, and the project has the features.
   const environment = await admin.environmentByKey(environmentKey);
