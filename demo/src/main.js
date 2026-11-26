@@ -1,4 +1,6 @@
 import flagsmith from '@flagsmith/flagsmith';
+// Inter ships with the page (OFL licence), so it looks the same on a Mac and on a Linux CI runner.
+import '@fontsource-variable/inter';
 
 // Flagshots opens this page once per flag variant and adds ?flagshots_identity=<name>.
 // Passing that name to Flagsmith as the user's identity is the only change an app needs:

@@ -8,13 +8,22 @@
 // full-page thumbnail.
 
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 
 // GitHub shows comment images at about this width, so the grid is laid out at it
 // and rendered at twice the pixels to stay sharp.
 const GRID_WIDTH = 880;
 
-async function dataUrl(file) {
-  return `data:image/png;base64,${(await readFile(file)).toString('base64')}`;
+async function dataUrl(file, type = 'image/png') {
+  return `data:${type};base64,${(await readFile(file)).toString('base64')}`;
+}
+
+// The grid's labels are set in Inter, shipped with Flagshots (OFL licence), so the image looks
+// the same on a Mac and on a Linux CI runner, which has no Inter or San Francisco.
+async function interFont() {
+  const css = createRequire(import.meta.url).resolve('@fontsource-variable/inter');
+  return dataUrl(path.join(path.dirname(css), 'files', 'inter-latin-wght-normal.woff2'), 'font/woff2');
 }
 
 // rendered: one entry from renderPages (the page, its default shot and the other shots).
@@ -44,7 +53,8 @@ export async function buildGrid(browser, rows, rendered, outFile) {
     // JSON inside a script tag: escape "<" so a flag value can't close the tag.
     // A function as the replacement, so a "$" in a flag value is left as it is.
     const json = JSON.stringify(data).replace(/</g, '\\u003c');
-    await page.setContent(GRID_HTML.replace('__DATA__', () => json));
+    const font = await interFont();
+    await page.setContent(GRID_HTML.replace('__DATA__', () => json).replace('__INTER__', () => font));
     await page.waitForFunction(() => document.body.dataset.done, null, { timeout: 60_000 });
     const result = await page.evaluate(() => window.gridResult);
     if (result.error) throw new Error(`The grid page failed: ${result.error}`);
@@ -60,6 +70,11 @@ const GRID_HTML = /* html */ `<!doctype html>
 <head>
 <meta charset="utf-8">
 <style>
+  @font-face {
+    font-family: 'Inter';
+    font-weight: 100 900;
+    src: url(__INTER__) format('woff2');
+  }
   :root {
     --bg: #f6f5f1;
     --surface: #ffffff;
@@ -67,7 +82,7 @@ const GRID_HTML = /* html */ `<!doctype html>
     --muted: #5f5c55;
     --line: #dcdad3;
     --empty: #e9e8e3;
-    font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+    font-family: 'Inter', sans-serif;
     color: var(--ink);
     background: var(--bg);
     -webkit-font-smoothing: antialiased;

@@ -14,7 +14,7 @@
   --radius-m: 12px;
   --radius-l: 20px;
 
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  font-family: 'Inter Variable', sans-serif;
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
