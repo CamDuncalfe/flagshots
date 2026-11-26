@@ -3,7 +3,8 @@
 //   node scripts/seed.js
 //
 // It signs up a local admin user, creates the organisation, project, environment and features,
-// then writes the environment key to demo/.env.local so the demo app can read its flags.
+// then writes the environment key to demo/.env.local so the demo app can read its flags,
+// and the settings npm run shots needs to .env.local.
 // Running it twice is safe: anything that already exists is reused.
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -61,6 +62,12 @@ const browserApiUrl = process.env.FLAGSMITH_BROWSER_API_URL ?? apiUrl;
 await writeFile(
   new URL('../demo/.env.local', import.meta.url),
   `VITE_FLAGSMITH_API_URL=${browserApiUrl}/\nVITE_FLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\n`,
+);
+
+// Settings for npm run shots on this machine. .env.local is in .gitignore: the token is an admin login.
+await writeFile(
+  new URL('../.env.local', import.meta.url),
+  `FLAGSMITH_API_URL=${apiUrl}\nFLAGSMITH_ENVIRONMENT_KEY=${environment.api_key}\nFLAGSMITH_ADMIN_TOKEN=${admin.token}\n`,
 );
 
 console.log(`Flagsmith dashboard: ${apiUrl.replace(/\/api\/v1$/, '')}`);

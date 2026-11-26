@@ -1,0 +1,7 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "pages": [{ "name": "Home", "path": "/" }],
+  "identityParam": "flagshots_identity",
+  "readySelector": "html[data-flags-ready]",
+  "viewport": { "width": 1280, "height": 800 }
+}

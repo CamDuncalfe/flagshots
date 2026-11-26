@@ -5,11 +5,23 @@
   "license": "MIT",
   "author": "Cam Duncalfe",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "flagsmith:up": "docker compose up -d",
     "flagsmith:down": "docker compose down",
     "seed": "node scripts/seed.js",
-    "demo": "npm --prefix demo run dev"
+    "demo": "npm --prefix demo run dev",
+    "demo:build": "npm --prefix demo run build",
+    "demo:preview": "npm --prefix demo run preview",
+    "shots": "node src/cli.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "playwright": "1.65.1"
+  },
+  "bin": {
+    "flagshots": "src/cli.js"
   }
 }
