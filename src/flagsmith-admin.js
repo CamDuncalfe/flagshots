@@ -102,9 +102,48 @@ export class FlagsmithAdmin {
     return this.request('POST', `/projects/${projectId}/features/`, feature);
   }
 
+  // The environment's details, including the id of the project it belongs to.
+  environmentByKey(environmentKey) {
+    return this.request('GET', `/environments/${environmentKey}/`);
+  }
+
   // The environment's own state for each feature: on or off, and the value.
-  environmentFeatureStates(environmentKey) {
-    return this.list(`/environments/${environmentKey}/featurestates/`);
+  // Segment overrides come back from the same route, so they're filtered out here.
+  async environmentFeatureStates(environmentKey) {
+    const states = await this.list(`/environments/${environmentKey}/featurestates/`);
+    return states.filter((s) => !s.identity && !s.feature_segment);
+  }
+
+  // Finds an identity by its exact identifier, or creates it.
+  // The ?q= search matches on part of the identifier, so the result is checked for an exact match.
+  async identity(environmentKey, identifier) {
+    const found = await this.list(
+      `/environments/${environmentKey}/identities/?q=${encodeURIComponent(identifier)}`,
+    );
+    const existing = found.find((i) => i.identifier === identifier);
+    return existing ?? this.request('POST', `/environments/${environmentKey}/identities/`, { identifier });
+  }
+
+  // Sets one identity's override for one feature. Flagsmith refuses a second override for the
+  // same feature and identity, so an existing one is updated in place.
+  async setIdentityOverride(environmentKey, identityId, featureId, { enabled, value }) {
+    const base = `/environments/${environmentKey}/identities/${identityId}/featurestates/`;
+    const body = { feature: featureId, enabled, feature_state_value: value ?? null };
+    const existing = (await this.list(base)).find((s) => s.feature === featureId);
+    if (existing) return this.request('PUT', `${base}${existing.id}/`, body);
+    return this.request('POST', base, body);
+  }
+
+  // Asks Flagsmith for an identity's flags the way an app's SDK does, with the client-side
+  // environment key and no admin token. Flagshots uses it to check each override took effect.
+  async flagsForIdentity(environmentKey, identifier) {
+    const res = await fetch(
+      `${this.apiUrl}/identities/?identifier=${encodeURIComponent(identifier)}`,
+      { headers: { 'X-Environment-Key': environmentKey } },
+    );
+    if (!res.ok) throw new Error(`Flagsmith answered ${res.status} for identity ${identifier}`);
+    const data = await res.json();
+    return new Map(data.flags.map((f) => [f.feature.name, { enabled: f.enabled, value: f.feature_state_value }]));
   }
 
   updateFeatureState(environmentKey, featureStateId, changes) {
