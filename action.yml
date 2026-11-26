@@ -1,0 +1,117 @@
+name: Flagshots
+description: Screenshots your app in every Flagsmith flag state and posts them side by side on the pull request
+author: Cam Duncalfe
+branding:
+  icon: flag
+  color: blue
+
+inputs:
+  start-command:
+    description: >-
+      Builds and serves your app. Flagshots runs it in the background once Flagsmith is ready,
+      with FLAGSMITH_API_URL and FLAGSMITH_ENVIRONMENT_KEY set, and waits for the config's baseUrl to answer.
+    required: true
+  config:
+    description: Path to flagshots.config.json (pages, baseUrl, viewport)
+    default: flagshots.config.json
+  seed-file:
+    description: The flags to create when Flagshots runs its own Flagsmith inside the job
+    default: flagshots.seed.json
+  flagsmith-api-url:
+    description: >-
+      Your own Flagsmith API root, for example https://flagsmith.example.com/api/v1.
+      Leave it empty and Flagshots runs Flagsmith inside the job from seed-file.
+    default: ''
+  environment-key:
+    description: Client-side key of the environment to screenshot (with flagsmith-api-url)
+    default: ''
+  admin-api-key:
+    description: Admin API token for reading flags and setting identity overrides (with flagsmith-api-url)
+    default: ''
+  flags:
+    description: Comma-separated flag names to render. Empty renders every flag.
+    default: ''
+  github-token:
+    description: Token for the image branch and the comment
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Flagshots and Chromium
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --omit=dev --no-audit --no-fund
+        npx playwright install --with-deps chromium
+
+    # The same docker compose file as local development: Postgres plus Flagsmith on localhost:8000.
+    # It's thrown away with the runner, so the job needs no Flagsmith account.
+    - name: Start Flagsmith in this job
+      if: inputs.flagsmith-api-url == ''
+      shell: bash
+      run: docker compose -f "$GITHUB_ACTION_PATH/docker-compose.yml" up -d --quiet-pull
+
+    - name: Create the flags from the seed file
+      if: inputs.flagsmith-api-url == ''
+      shell: bash
+      env:
+        FLAGSHOTS_SEED_FILE: ${{ inputs.seed-file }}
+      run: |
+        # A fresh password per run for the admin account on the throwaway Flagsmith.
+        export FLAGSHOTS_ADMIN_PASSWORD="$(openssl rand -hex 16)"
+        node "$GITHUB_ACTION_PATH/scripts/seed.js"
+
+    - name: Use your Flagsmith
+      if: inputs.flagsmith-api-url != ''
+      shell: bash
+      env:
+        API_URL: ${{ inputs.flagsmith-api-url }}
+        ENVIRONMENT_KEY: ${{ inputs.environment-key }}
+        ADMIN_TOKEN: ${{ inputs.admin-api-key }}
+      run: |
+        echo "::add-mask::$ADMIN_TOKEN"
+        {
+          echo "FLAGSMITH_API_URL=$API_URL"
+          echo "FLAGSMITH_ENVIRONMENT_KEY=$ENVIRONMENT_KEY"
+          echo "FLAGSMITH_ADMIN_TOKEN=$ADMIN_TOKEN"
+        } >> "$GITHUB_ENV"
+
+    # The app is built here, after the seed, because a front end usually bakes the
+    # environment key in at build time. It keeps running after this step ends.
+    - name: Start the app
+      shell: bash
+      env:
+        START_COMMAND: ${{ inputs.start-command }}
+      run: nohup bash -c "$START_COMMAND" > "$RUNNER_TEMP/flagshots-app.log" 2>&1 &
+
+    - name: Screenshot every flag state
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        FLAGS: ${{ inputs.flags }}
+      run: node "$GITHUB_ACTION_PATH/src/cli.js" --config "$CONFIG" --out "$RUNNER_TEMP/flagshots" ${FLAGS:+--flags "$FLAGS"}
+
+    - name: Show the app's log
+      if: failure()
+      shell: bash
+      run: tail -n 100 "$RUNNER_TEMP/flagshots-app.log" || true
+
+    - name: Keep the screenshots with the run
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: flagshots
+        path: ${{ runner.temp }}/flagshots
+        if-no-files-found: ignore
+
+    - name: Post the grids on the pull request
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: node "$GITHUB_ACTION_PATH/src/publish.js" "$RUNNER_TEMP/flagshots/flagshots.json"
+
+    - name: Stop Flagsmith
+      if: always() && inputs.flagsmith-api-url == ''
+      shell: bash
+      run: docker compose -f "$GITHUB_ACTION_PATH/docker-compose.yml" down

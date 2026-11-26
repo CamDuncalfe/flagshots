@@ -1,0 +1,31 @@
+# Runs Flagshots on this repo's own pull requests, against the Kettle demo in demo/.
+name: Flagshots
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # the flagshots-images branch
+  pull-requests: write # the comment
+
+# A new push to the same pull request cancels the run still going for the last one.
+concurrency:
+  group: flagshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flagshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          # Vite reads the VITE_ variables at build time, then serves the built page on :5173.
+          start-command: >-
+            npm --prefix demo ci --no-audit --no-fund &&
+            VITE_FLAGSMITH_API_URL="$FLAGSMITH_API_URL/"
+            VITE_FLAGSMITH_ENVIRONMENT_KEY="$FLAGSMITH_ENVIRONMENT_KEY"
+            npm --prefix demo run build &&
+            npm --prefix demo run preview
