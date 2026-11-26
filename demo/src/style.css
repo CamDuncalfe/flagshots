@@ -1,0 +1,260 @@
+/* Kettle demo page. Each flag changes something you can see in a small screenshot. */
+
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --ink: #1b1a17;
+  --muted: #55524b;
+  --line: #e2dfd6;
+  --accent: #2858d6;
+  --on-accent: #ffffff;
+
+  /* Radius scale. A shape inside another one uses the next step down. */
+  --radius-s: 6px;
+  --radius-m: 12px;
+  --radius-l: 20px;
+
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='dark'] {
+  --bg: #141517;
+  --surface: #1e2023;
+  --ink: #ecebe6;
+  --muted: #a9a8a2;
+  --line: #2f3236;
+  --accent: #6b9bff;
+  --on-accent: #141517;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  margin: 0;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+.site-header,
+main > section {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-inline: 40px;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 24px;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 20px;
+}
+
+nav {
+  display: flex;
+  gap: 28px;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.button {
+  display: inline-block;
+  padding: 12px 20px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Hero. hero_layout sets data-hero-layout on <html> to classic, split or banner. */
+
+.hero {
+  display: grid;
+  gap: 48px;
+  padding-block: 72px 88px;
+}
+
+.hero h1 {
+  font-size: 56px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  max-width: 14ch;
+}
+
+.hero-copy p {
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 52ch;
+  margin: 20px 0 32px;
+}
+
+.hero-preview {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+}
+
+/* Inner corners are the outer radius minus the 8px padding, so the next step down. */
+.hero-preview li {
+  padding: 18px 20px;
+  border-radius: var(--radius-m);
+  background: var(--bg);
+  line-height: 1.45;
+  font-size: 15px;
+}
+
+.hero-preview strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* classic: text only. */
+[data-hero-layout='classic'] .hero-preview {
+  display: none;
+}
+
+/* split: text on the left, today's summary on the right. */
+[data-hero-layout='split'] .hero {
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+}
+
+[data-hero-layout='split'] .hero h1 {
+  font-size: 48px;
+}
+
+/* banner: a full-width band in the accent colour, with the summary hidden. */
+[data-hero-layout='banner'] .hero {
+  max-width: none;
+  background: var(--accent);
+  padding-inline: max(40px, calc((100% - 1040px) / 2));
+}
+
+[data-hero-layout='banner'] .hero h1 {
+  color: var(--on-accent);
+  max-width: 18ch;
+}
+
+[data-hero-layout='banner'] .hero-copy p {
+  color: var(--on-accent);
+  opacity: 0.9;
+}
+
+[data-hero-layout='banner'] .hero .button-primary {
+  background: var(--on-accent);
+  border-color: var(--on-accent);
+  color: var(--accent);
+}
+
+[data-hero-layout='banner'] .hero-preview {
+  display: none;
+}
+
+/* Pricing */
+
+.pricing {
+  padding-block: 24px 96px;
+}
+
+.pricing h2 {
+  font-size: 32px;
+  margin-bottom: 28px;
+}
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+}
+
+.plan-featured {
+  border-color: var(--accent);
+}
+
+.plan h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+}
+
+.price {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+}
+
+.price span {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.plan p:not(.price) {
+  color: var(--muted);
+  text-wrap: balance;
+  line-height: 1.5;
+  margin: 0 0 24px;
+  flex: 1;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-s);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.badge[hidden] {
+  display: none;
+}

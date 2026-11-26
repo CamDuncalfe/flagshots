@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kettle: daily standups for small teams</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <span class="logo">Kettle</span>
+      <nav>
+        <a href="#how">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#">Sign in</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="how">
+        <div class="hero-copy">
+          <h1>Write your standup when it suits you</h1>
+          <p>
+            Kettle asks each person on your team for a short update and sends everyone one
+            summary before lunch. Nobody has to be on a call at nine.
+          </p>
+          <a class="button button-primary" href="#pricing" data-checkout-copy>Start free trial</a>
+        </div>
+
+        <ul class="hero-preview" aria-label="Today's summary">
+          <li><strong>Priya</strong> Finished the invoice export. Next up is the empty states.</li>
+          <li><strong>Tom</strong> Fixed the login bug on Android. Waiting on review.</li>
+          <li><strong>Ana</strong> Interviews with three customers this afternoon.</li>
+        </ul>
+      </section>
+
+      <section class="pricing" id="pricing">
+        <h2>Pricing</h2>
+        <div class="plans">
+          <article class="plan">
+            <h3>Free</h3>
+            <p class="price">$0</p>
+            <p>Up to five people and one summary a day.</p>
+            <a class="button" href="#">Choose Free</a>
+          </article>
+          <article class="plan plan-featured">
+            <h3>Team <span class="badge" data-flag="pricing_badge" hidden>New</span></h3>
+            <p class="price">$6 <span>per person a month</span></p>
+            <p>Any team size, with summaries in Slack and email.</p>
+            <a class="button button-primary" href="#" data-checkout-copy>Start free trial</a>
+          </article>
+          <article class="plan">
+            <h3>Business</h3>
+            <p class="price">$12 <span>per person a month</span></p>
+            <p>Single sign-on, an audit log and priority support.</p>
+            <a class="button" href="#">Talk to us</a>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
