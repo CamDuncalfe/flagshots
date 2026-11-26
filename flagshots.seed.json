@@ -1,0 +1,35 @@
+{
+  "organisation": "Flagshots demo",
+  "project": "Kettle",
+  "environment": "Development",
+  "features": [
+    {
+      "name": "hero_layout",
+      "description": "Which layout the home page hero uses",
+      "type": "MULTIVARIATE",
+      "enabled": true,
+      "value": "classic",
+      "variants": ["split", "banner"]
+    },
+    {
+      "name": "pricing_badge",
+      "description": "Shows a New badge on the Team plan",
+      "type": "STANDARD",
+      "enabled": false
+    },
+    {
+      "name": "checkout_button_copy",
+      "description": "The label on the sign-up buttons",
+      "type": "MULTIVARIATE",
+      "enabled": true,
+      "value": "Start free trial",
+      "variants": ["Get started", "Try it free for 14 days"]
+    },
+    {
+      "name": "dark_mode",
+      "description": "Dark colour scheme",
+      "type": "STANDARD",
+      "enabled": false
+    }
+  ]
+}
